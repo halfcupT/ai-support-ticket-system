@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  # Local LLM runtime - zero cost, no API key, no internet needed after the
+  # first model pull. This is what makes `docker-compose up` a genuine
+  # single-command, zero-cost start for the whole system.
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "ollama serve &
+       sleep 3 &&
+       ollama pull llama3.2:1b &&
+       wait"
+
+  api:
+    build: .
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    environment:
+      - LLM_PROVIDER=ollama
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=llama3.2:1b
+    depends_on:
+      - ollama
+
+  ui:
+    build: .
+    command: ["streamlit", "run", "ui/streamlit_app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+    ports:
+      - "8501:8501"
+    environment:
+      - API_BASE_URL=http://api:8000
+    depends_on:
+      - api
+
+volumes:
+  ollama_models:
